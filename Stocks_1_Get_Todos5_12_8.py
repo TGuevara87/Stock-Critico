@@ -280,14 +280,33 @@ columnas_ordenadas = [
 
 df_total = df_total[[col for col in columnas_ordenadas if col in df_total.columns]]
 
+
 #------------------------------------------------------------------
 #--------------------PRODUCTOS INACTIVOS---------------------------
 #------------------------------------------------------------------
 
-# 📌 Identificar productos inactivos (sin movimientos los últimos 6 meses desde la fecha actual)
-fecha_actual = pd.to_datetime(datetime.now())
-fecha_corte = fecha_actual - pd.DateOffset(months=6)
-df_inactivos = df_total[(df_total["Fecha"] < fecha_corte) & (df_total["Movimientos"] == 0)]
+# Convertir la columna "Fecha" a formato datetime, manejando errores con "coerce" para evitar problemas con valores no convertibles.
+df_total["Fecha"] = pd.to_datetime(df_total["Fecha"], errors="coerce")
+
+# Solo registros actuales
+df_actual = df_total[df_total["Ultimo"] == True].copy()
+
+# Fecha límite
+fecha_corte = pd.Timestamp.now() - pd.DateOffset(months=6)
+
+# Calcular días sin movimiento
+df_actual["Dias_Sin_Movimiento"] = (
+    pd.Timestamp.now() - df_actual["Fecha"]
+).dt.days
+
+# ---------------- INACTIVOS GENERALES -----------------------
+df_inactivos = df_actual[df_actual["Fecha"] < fecha_corte]
+
+# ---------------- INACTIVOS EN BODEGA VENTAS ----------------
+df_inactivos_ventas = df_actual[
+    (df_actual["Bodega"] == "Bodega Ventas") &
+    (df_actual["Fecha"] < fecha_corte)
+]
 
 
 #------------------------------------------------------------------
