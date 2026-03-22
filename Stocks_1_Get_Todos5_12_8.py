@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 import time
 import numpy as np
+from dotenv import load_dotenv
 from docx import Document
 from docx.shared import Inches, Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -20,7 +21,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 from pathlib import Path
 
-# Esta version extrae los datos y saca la 
+# Esta version extrae los datos y saca la
 # DIFERENCIA, MOVIMIENTOS Y STOCK CRITCO
 #Solo agrega los datos cuando hay diferencia, en caso contrario, no guarda nada.
 #Cambiamos delimitadores de CSV por ";".
@@ -28,20 +29,26 @@ from pathlib import Path
 #Agregamos alerta de Stock Critico cada vez que un producto entra en él.
 
 
+#----------------------------------------------------------------------------------
+#---------------------------Obtención datos de BSALE-------------------------------
+#----------------------------------------------------------------------------------
 
-# ---------------Obtención datos de BSALE---------------
+#--------------Configuración del servidor BSALE-------------
 
-# 📌 Configuración del servidor BSALE
 BSALE_URL = "https://api.bsale.io/v1/stocks.json"
-TOKEN = "a1f4df6fb5b62913421416ef30f7b91bcd15d759"
+load_dotenv()
+TOKEN = os.getenv("BSALE_TOKEN")
+if not TOKEN:
+    raise ValueError("No se encontró BSALE_TOKEN en el archivo .env")
 LIMIT = 50
 
-# 📌 Definir intervalo de actualización en segundos
+#--------Definir intervalo de actualización en segundos---------
+
 INTERVALO_SEGUNDOS = 60  # Cambia esto según la frecuencia deseada
 
-#def actualizar_stock():
 
-# 📌 Encabezados para autenticación
+#--------Encabezados para autenticación----------------
+
 headers = {
     "access_token": TOKEN,
     "Content-Type": "application/json"
@@ -56,8 +63,13 @@ offset = 0
 # Obtener la fecha y hora actual solo UNA VEZ antes de recorrer los productos
 timestamp_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+
+
 while True:
-    response = requests.get(f"{BSALE_URL}?limit={LIMIT}&offset={offset}&expand=variants,offices,product", headers=headers)
+    response = requests.get(
+        f"{BSALE_URL}?limit={LIMIT}&offset={offset}&expand=variants,offices,product",
+        headers=headers,
+        timeout=120)
 
     if response.status_code == 200:
         data = response.json()
@@ -96,8 +108,9 @@ print(df_nuevo[df_nuevo["Fecha"].isna()])
 
 
 
-
-# -----------------------------RUTAS-------------------------------------------
+#-----------------------------------------------------------------------------
+#-----------------------------RUTAS-------------------------------------------
+#-----------------------------------------------------------------------------
 
 # 📌 Rutas para guardar los archivos
 BASE_DIR = Path(__file__).resolve().parent
@@ -108,18 +121,22 @@ ruta_productos_unicos = os.path.join(ruta_carpeta, "productos_unicos.csv")
 ruta_excel = os.path.join(ruta_carpeta, "historial_stock.xlsx")
 ruta_word = os.path.join(ruta_carpeta,"Informe Stock Productos.docx")
 ruta_word2 = os.path.join(ruta_carpeta,"Informe Stock Crítico.docx")
-ruta_word3 = os.path.join(ruta_carpeta,"Informe Stock Crítico - MP.docx")
-ruta_word4 = os.path.join(ruta_carpeta,"Informe Stock Crítico - PT.docx")
-ruta_word_bv = os.path.join(ruta_carpeta,"Informe Stock Crítico - BV.docx")
-ruta_word_compras = os.path.join(ruta_carpeta,"Informe Stock Crítico - COMPRAS.docx")
+ruta_word_mp = os.path.join(ruta_carpeta,"Informe MP.docx")
+ruta_word_pt = os.path.join(ruta_carpeta,"Informe PT.docx")
+ruta_word_bv = os.path.join(ruta_carpeta,"Informe BV.docx")
+ruta_word_compras_bienes = os.path.join(ruta_carpeta,"Informe COMPRAS - BIENES.docx")
+ruta_word_compras_insumos = os.path.join(ruta_carpeta,"Informe COMPRAS - INSUMOS.docx")
+ruta_word_inactivos = os.path.join(ruta_carpeta,"Informe INACTIVOS.docx")
 ruta_ventas = os.path.join(ruta_carpeta,"Ventas.xlsx")
 ruta_consumos = os.path.join(ruta_carpeta,"Consumos.xlsx")
 ruta_stock_critico = os.path.join(ruta_carpeta, "Stock_Critico.xlsx")  # 📌 Ruta del archivo de stock crítico
 ruta_stock_critico_compilado = os.path.join(ruta_carpeta, "STOCK CRÍTICO COMPILADO.xlsx")  # 📌 Ruta del archivo de stock crítico
-ruta_pdf3 = os.path.join(ruta_carpeta,"Informe Stock Crítico - MP.pdf")
-ruta_pdf4 = os.path.join(ruta_carpeta,"Informe Stock Crítico - PT.pdf")
-ruta_pdf_bv = os.path.join(ruta_carpeta,"Informe Stock Crítico - BV.pdf")
-ruta_pdf_compras = os.path.join(ruta_carpeta,"Informe Stock Crítico - COMPRAS.pdf")
+ruta_pdf_mp = os.path.join(ruta_carpeta,"Informe MP.pdf")
+ruta_pdf_pt = os.path.join(ruta_carpeta,"Informe PT.pdf")
+ruta_pdf_bv = os.path.join(ruta_carpeta,"Informe BV.pdf")
+ruta_pdf_compras_bienes = os.path.join(ruta_carpeta,"Informe COMPRAS - BIENES.pdf")
+ruta_pdf_compras_insumos = os.path.join(ruta_carpeta,"Informe COMPRAS - INSUMOS.pdf")
+ruta_pdf_inactivos = os.path.join(ruta_carpeta,"Informe INACTIVOS.pdf")   
 ruta_dcrit = os.path.join(ruta_carpeta,"Destinatarios Critico.xlsx")
 ruta_excel_pt = os.path.join(ruta_carpeta, "Informe PT.xlsx")
 ruta_excel_bv = os.path.join(ruta_carpeta, "Informe BV.xlsx")
@@ -281,32 +298,47 @@ columnas_ordenadas = [
 df_total = df_total[[col for col in columnas_ordenadas if col in df_total.columns]]
 
 
-#------------------------------------------------------------------
-#--------------------PRODUCTOS INACTIVOS---------------------------
-#------------------------------------------------------------------
 
-# Convertir la columna "Fecha" a formato datetime, manejando errores con "coerce" para evitar problemas con valores no convertibles.
+
+#-----------------------------------------------------------------------------
+#-------------------------- PRODUCTOS INACTIVOS ------------------------------
+#-----------------------------------------------------------------------------
+
+# 📌 1. Normalizar fecha (una sola vez)
 df_total["Fecha"] = pd.to_datetime(df_total["Fecha"], errors="coerce")
 
-# Solo registros actuales
-df_actual = df_total[df_total["Ultimo"] == True].copy()
+# 📌 2. Obtener solo el último estado de cada producto/bodega
+df_actual = df_total.loc[df_total["Ultimo"] == True].copy()
 
-# Fecha límite
-fecha_corte = pd.Timestamp.now() - pd.DateOffset(months=6)
+# 📌 3. Definir timestamp único (evita micro diferencias de tiempo)
+timestamp_actual = pd.Timestamp.now()
 
-# Calcular días sin movimiento
+# 📌 4. Fecha límite de inactividad (6 meses)
+fecha_corte = timestamp_actual - pd.DateOffset(months=6)
+
+# 📌 5. Calcular días sin movimiento
 df_actual["Dias_Sin_Movimiento"] = (
-    pd.Timestamp.now() - df_actual["Fecha"]
+    timestamp_actual - df_actual["Fecha"]
 ).dt.days
 
-# ---------------- INACTIVOS GENERALES -----------------------
-df_inactivos = df_actual[df_actual["Fecha"] < fecha_corte]
+# 📌 6. Clasificar estado de movimiento (MEJORA CLAVE)
+df_actual["Estado_Movimiento"] = "Activo"
 
-# ---------------- INACTIVOS EN BODEGA VENTAS ----------------
-df_inactivos_ventas = df_actual[
-    (df_actual["Bodega"] == "Bodega Ventas") &
-    (df_actual["Fecha"] < fecha_corte)
+df_actual.loc[
+    df_actual["Fecha"] < fecha_corte,
+    "Estado_Movimiento"
+] = "Inactivo"
+
+# 📌 7. DataFrames derivados (ya listos para informes)
+df_inactivos = df_actual[df_actual["Estado_Movimiento"] == "Inactivo"]
+
+df_activos = df_actual[df_actual["Estado_Movimiento"] == "Activo"]
+
+# 📌 8. Inactivos solo en Bodega Ventas
+df_inactivos_ventas = df_inactivos[
+    df_inactivos["Bodega"] == "Bodega Ventas"
 ]
+
 
 
 #------------------------------------------------------------------
@@ -669,9 +701,9 @@ def repetir_encabezado_en_word(fila_encabezado):
 
 
 
-#-----------------------------------------------------------------------------
-#---------------------WORD STOCK CRITICO - MP---------------------------------
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------------
+#----------------------------WORD STOCK CRITICO - MP---------------------------------
+#------------------------------------------------------------------------------------
 
 ### **🔹 Crear el Word**
 doc = Document()
@@ -738,6 +770,7 @@ df_resumen_sorted3 = df_resumen.sort_values(by="Dias_Stock_Actual", ascending=Tr
 
 # Filtrar los productos que tienen Stock Critico
 df_resumen_sorted3_critico_mp = df_resumen_sorted3[
+    (df_activos["Estado"] == "Activo") &
     (df_resumen_sorted3["Informe"] == "SI") &
     (df_resumen_sorted3["Tipo_Producto"] == "Bien") &
     (df_resumen_sorted3["Produccion"] == "MP") &
@@ -824,14 +857,14 @@ for _, row in df_resumen_sorted3_critico_mp[df_encabezados3].iterrows():
 
 # --------------GUARDAR el Documento WORD STOCK CRITICO - MP----------------
 
-doc.save(ruta_word3)
-print(f"✅ Archivo guardado en: {ruta_word3}")
+doc.save(ruta_word_mp)
+print(f"✅ Archivo guardado en: {ruta_word_mp}")
 
 
 ### -------------------------------PDF STOCK CRITICO - MP---------------------------
 
 # Convierte un archivo Word específico a PDF
-convert(ruta_word3, ruta_pdf3) # crea documento.pdf en el mismo directorio
+convert(ruta_word_mp, ruta_pdf_mp) # crea documento.pdf en el mismo directorio
 
 
 
@@ -907,10 +940,11 @@ df_resumen_sorted3 = df_resumen.sort_values(by="Dias_Stock_Actual", ascending=Tr
 
 # Filtrar los productos que tienen Stock Critico
 df_resumen_sorted3_critico_pt = df_resumen_sorted3[
-                            (df_resumen_sorted3["Informe"] == "SI") &
-                            (df_resumen_sorted3["Producto"].isin(["PT", "IM"]) ) &
-                            (df_resumen_sorted3["Alerta_Stock"].isin(["QUIEBRE", "CRITICO"]))
-                           ].sort_values(by="Dias_Stock_Actual")
+    (df_activos["Estado"] == "Activo") &
+    (df_resumen_sorted3["Informe"] == "SI") &
+    (df_resumen_sorted3["Tipo_Producto"] == "Bien") &
+    (df_resumen_sorted3["Producto"].isin(["PT", "IM"]) ) &
+    (df_resumen_sorted3["Alerta_Stock"].isin(["QUIEBRE", "CRITICO"]))]
 
 # Agregar tabla a Word
 tabla = doc.add_table(rows=1, cols=len(encabezados3_word), style="Table Grid") #Tabla tamaño, 1 fila y el n° de encabezados por columnas
@@ -987,14 +1021,15 @@ for _, row in df_resumen_sorted3_critico_pt[df_encabezados3].iterrows():
 
 # --------------GUARDAR el Documento WORD STOCK CRITICO - PT----------------
 
-doc.save(ruta_word4)
-print(f"✅ Archivo guardado en: {ruta_word4}")
+doc.save(ruta_word_pt)
+print(f"✅ Archivo guardado en: {ruta_word_pt}")
 
 
 ### -------------------------------PDF STOCK CRITICO - PT---------------------------
 
 # Convierte un archivo Word específico a PDF
-convert(ruta_word4, ruta_pdf4) # crea documento.pdf en el mismo directorio
+convert(ruta_word_pt, ruta_pdf_pt) # crea documento.pdf en el mismo directorio
+
 
 
 ##--------------------------------------------------------------------------
@@ -1032,6 +1067,8 @@ convert(ruta_word4, ruta_pdf4) # crea documento.pdf en el mismo directorio
 # print(f"✅ Informe exportado exitosamente a: {ruta_excel}")
 
 # aplicar_formato_excel(ruta_excel_pt)
+
+
 
 
 
@@ -1107,9 +1144,11 @@ df_resumen_ordenado_bv = df_resumen.sort_values(by="Dias_Stock_Actual_BV", ascen
 
 # Filtrar los productos que tienen Stock Critico
 df_resumen_ordenado_filtrado_bv = df_resumen_ordenado_bv[
-                            (df_resumen_ordenado_bv["Informe"] == "SI") &
-                            (df_resumen_ordenado_bv["Venta_Promedio_Diario"] > 0)
-                            ]
+    (df_inactivos_ventas["Estado"] == "Activo") &
+    (df_resumen_ordenado_bv["Informe"] == "SI") &
+    (df_resumen_ordenado_bv["Tipo_Producto"] == "Bien") &
+    (df_resumen_ordenado_bv["Venta_Promedio_Diario"] > 0)
+    ]
 
 # Agregar tabla a Word
 tabla = doc.add_table(rows=1, cols=len(encabezados_word_bv), style="Table Grid") #Tabla tamaño, 1 fila y el n° de encabezados por columnas
@@ -1199,53 +1238,53 @@ print(f"✅ Archivo guardado en: {ruta_word_bv}")
 convert(ruta_word_bv, ruta_pdf_bv) # crea documento.pdf en el mismo directorio
 
 
-### -----------------------------EXCEL STOCK CRITICO - BODEGA VENTAS-----------------------------
+# ### -----------------------------EXCEL STOCK CRITICO - BODEGA VENTAS-----------------------------
 
-# Asegúrate de que este sea el mismo orden de columnas en tu DataFrame
-columnas_mapeo = {
-    "PRODUCTO": "Producto",
-    "SKU": "SKU",
-    "UND": "UND",
-    "Stock BV": "Bodega Ventas",
-    "Dias Stock": "Dias_Stock_Actual_BV",
-    "Stock Max": "Stock_Maximo_BV",
-    "Cant. solicitar": "Cantidad_Solicitar",
-    "%Disp": "%Disponibilidad_BV",
-    "Estado": "Alerta_Stock_BV"
-}
+# # Asegúrate de que este sea el mismo orden de columnas en tu DataFrame
+# columnas_mapeo = {
+#     "PRODUCTO": "Producto",
+#     "SKU": "SKU",
+#     "UND": "UND",
+#     "Stock BV": "Bodega Ventas",
+#     "Dias Stock": "Dias_Stock_Actual_BV",
+#     "Stock Max": "Stock_Maximo_BV",
+#     "Cant. solicitar": "Cantidad_Solicitar",
+#     "%Disp": "%Disponibilidad_BV",
+#     "Estado": "Alerta_Stock_BV"
+# }
 
-# Ordenar todos los datos de manera ascendente por DIAS STOCK ACTIAL
-df_resumen_ordenado_bv = df_resumen.sort_values(by="Dias_Stock_Actual_BV", ascending=True)  # Ascendente
+# # Ordenar todos los datos de manera ascendente por DIAS STOCK ACTIAL
+# df_resumen_ordenado_bv = df_resumen.sort_values(by="Dias_Stock_Actual_BV", ascending=True)  # Ascendente
 
-# Filtrar los productos que tienen Stock Critico
-df_resumen_ordenado_filtrado_bv = df_resumen_ordenado_bv[
-                            (df_resumen_ordenado_bv["Venta_Promedio_Diario"] > 0)]
+# # Filtrar los productos que tienen Stock Critico
+# df_resumen_ordenado_filtrado_bv = df_resumen_ordenado_bv[
+#                             (df_resumen_ordenado_bv["Venta_Promedio_Diario"] > 0)]
 
 
-# Crear DataFrame para exportar: seleccionar columnas y renombrarlas
-df_exportar = df_resumen_ordenado_filtrado_bv[list(columnas_mapeo.values())].copy()
-df_exportar.columns = list(columnas_mapeo.keys())
+# # Crear DataFrame para exportar: seleccionar columnas y renombrarlas
+# df_exportar = df_resumen_ordenado_filtrado_bv[list(columnas_mapeo.values())].copy()
+# df_exportar.columns = list(columnas_mapeo.keys())
 
-# Exportar a Excel
-df_exportar.to_excel(ruta_excel_bv, index=False)
+# # Exportar a Excel
+# df_exportar.to_excel(ruta_excel_bv, index=False)
 
-print(f"✅ Informe exportado exitosamente a: {ruta_excel_bv}")
+# print(f"✅ Informe exportado exitosamente a: {ruta_excel_bv}")
 
-aplicar_formato_excel(ruta_excel_bv)
+# aplicar_formato_excel(ruta_excel_bv)
 
 
 
 
 
 #-------------------------------------------------------------------------------------------------
-#------------------------------WORD STOCK CRITICO - COMPRAS---------------------------------------
+#-----------------------WORD COMPRAS - BIENES---------------------------------------
 #-------------------------------------------------------------------------------------------------
 
 ### **🔹 Crear el Word**
 doc = Document()
 
 
-# -------------------CONFIGURACIÓN WORD STOCK CRITICO - COMPRAS-----------------------
+# -------------------CONFIGURACIÓN WORD COMPRAS - BIENES-----------------------
 
 # 1. Márgenes del documento, (1 cm = 0.3937 pulgadas)
 sections = doc.sections
@@ -1265,7 +1304,7 @@ section.page_width = new_width
 section.page_height = new_height
 
 # 3. Alineación del título principal
-titulo = doc.add_heading("Informe Stock Crítico - COMPRAS", level=1)
+titulo = doc.add_heading("Informe COMPRAS- BIENES", level=1)
 titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Centrar título
 
 # (Opcional) Cambiar fuente y tamaño del título
@@ -1306,6 +1345,7 @@ df_resumen_compras_ordenado = df_resumen.sort_values(by="Dias_Stock_Actual", asc
 
 # Filtrar los productos que tienen Stock Critico
 df_resumen_compras_ordenado_filtrado = df_resumen_compras_ordenado[
+    (df_activos["Estado"] == "Activo") &
     (df_resumen_compras_ordenado["Informe"] == "SI") &
     (df_resumen_compras_ordenado["Tipo_Producto"].isin(["Bien"])) &
     (df_resumen_compras_ordenado["Compra"].isin(["SI"])) &
@@ -1390,21 +1430,21 @@ for _, row in df_resumen_compras_ordenado_filtrado[df_encabezados_compras].iterr
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Resto centrado
 
 
-# --------------GUARDAR el Documento WORD STOCK CRITICO - COMPRAS----------------
+# --------------GUARDAR el Documento WORD COMPRAS - BIENES----------------------------
 
-doc.save(ruta_word_compras)
-print(f"✅ Archivo guardado en: {ruta_word_compras}")
+doc.save(ruta_word_compras_bienes)
+print(f"✅ Archivo guardado en: {ruta_word_compras_bienes}")
 
 
-### -------------------------------PDF STOCK CRITICO - COMPRAS---------------------------
+### -------------------------------PDF COMPRAS - BIENES---------------------------
 
 # Convierte un archivo Word específico a PDF
-convert(ruta_word_compras, ruta_pdf_compras) # crea documento.pdf en el mismo directorio
+convert(ruta_word_compras_bienes, ruta_pdf_compras_bienes) # crea documento.pdf en el mismo directorio
 
 
 
 #--------------------------------------------------------------------------------------------
-# ### --------------------------EXCEL STOCK CRITICO - COMPRAS--------------------------------
+# ### --------------------------EXCEL COMPRAS - BIENES--------------------------------
 #--------------------------------------------------------------------------------------------
 
 # # Asegúrate de que este sea el mismo orden de columnas en tu DataFrame
@@ -1443,23 +1483,351 @@ convert(ruta_word_compras, ruta_pdf_compras) # crea documento.pdf en el mismo di
 
 
 
+#-------------------------------------------------------------------------------------------------
+#--------------------------------------WORD COMPRAS INSUMOS---------------------------------------
+#-------------------------------------------------------------------------------------------------
+
+### **🔹 Crear el Word**
+doc = Document()
+
+
+# -------------------CONFIGURACIÓN WORD COMPRAS INSUMOS-----------------------
+
+# 1. Márgenes del documento, (1 cm = 0.3937 pulgadas)
+sections = doc.sections
+for section in sections:
+    section.top_margin = Cm(0.5)
+    section.bottom_margin = Cm(0.5)
+    section.left_margin = Cm(1)
+    section.right_margin = Cm(1)
+
+# 2. Cambiar orientación a HORIZONTAL (LANDSCAPE)
+section = doc.sections[-1]  # Puedes usar [-1] para tomar la última sección (o [0] si es una sola)
+section.orientation = WD_ORIENT.LANDSCAPE
+
+# ⚠️ Este paso es obligatorio para que el cambio surta efecto
+new_width, new_height = section.page_height, section.page_width
+section.page_width = new_width
+section.page_height = new_height
+
+# 3. Alineación del título principal
+titulo = doc.add_heading("Informe COMPRAS INSUMOS", level=1)
+titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Centrar título
+
+# (Opcional) Cambiar fuente y tamaño del título
+run = titulo.runs[0]
+#run.font.name = "Calibri"
+run.font.size = Pt(16)
+
+
+# -------------------CONFIGURACIÓN DATOS COLUMNAS - COMPRAS INSUMOS-----------------------
+
+# Lista de encabezados de la hoja RESUMEN
+df_encabezados_compras = [
+    "Producto",
+    "SKU",
+    "UND",
+    "Stock",
+    "Dias_Stock_Actual",
+    "Stock_Maximo", 
+    "Cantidad_Comprar_o_Producir",
+    "%Disponibilidad",
+    "Alerta_Stock"]
+
+
+# Lista de encabezados para el informe en word.
+encabezados_compras_word = [
+    "PRODUCTO",
+    "SKU",
+    "UND",
+    "Stock",
+    "Dias Stock",
+    "Stock Max",
+    "Comprar",
+    "%Disp",
+    "Estado"]
+
+# Ordenar todos los datos de manera ascendente por DIAS STOCK ACTIAL
+df_resumen_compras_ordenado = df_resumen.sort_values(by="Dias_Stock_Actual", ascending=True)  # Ascendente
+
+# Filtrar los productos que tienen Stock Critico
+df_resumen_compras_ordenado_filtrado = df_resumen_compras_ordenado[
+    (df_activos["Estado"] == "Activo") &
+    (df_resumen_compras_ordenado["Informe"] == "SI") &
+    (df_resumen_compras_ordenado["Tipo_Producto"].isin(["INSUMO"])) &
+    (df_resumen_compras_ordenado["Compra"].isin(["SI"])) &
+    (df_resumen_compras_ordenado["Alerta_Stock"].isin(["QUIEBRE", "CRITICO"]))]
+
+# Agregar tabla a Word
+tabla = doc.add_table(rows=1, cols=len(encabezados_compras_word), style="Table Grid") #Tabla tamaño, 1 fila y el n° de encabezados por columnas
+
+tabla.autofit = False  # ✅ Word NO ajustará automáticamente el ancho de cada columna
+
+# Configurar ancho de las columnas
+anchos_columnas_cm = [10, 2, 1.5, 2, 2, 2, 2, 2.12, 2.7]
+
+
+# -------------------CONFIGURACIÓN ENCABEZADOS WORD - COMPRAS INSUMOS-----------------------
+
+# ✅ Hace que el encabezado se repita en cada página
+# tabla.rows[0].repeat_header = True
+
+# Agregar encabezados para el informe en word
+celdas = tabla.rows[0].cells # Selecciona todas las celdas de la 1° fila (rows[0]) y de todas las columnas (cells).
+for i, encabezado in enumerate(encabezados_compras_word):  # Recorre toda la lista de encabezados.
+    celdas[i].text = str(encabezado) # Agrega cada encabezado de la lista a la respectiva celda.
+
+    # ✅ Asignar ancho también a las celdas de las filas de datos
+    celdas[i].width = Cm(anchos_columnas_cm[i])
+
+    # Alineación vertical (celda)
+    celdas[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER  
+
+    # 👉 Formato de fuente y alineación
+    for paragraph in celdas[i].paragraphs:
+        run = paragraph.runs[0]
+        run.bold = True                      # Negrita
+        #run.font.size = Pt(10)               # Tamaño de fuente
+        #run.font.name = "Calibri"            # Tipo de letra
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Centrado
+
+
+repetir_encabezado_en_word(tabla.rows[0])
+
+
+# -------------------DATOS DE LA MATRIZ - COMPRAS INSUMOS-----------------------
+
+# Agregar filas de datos
+for _, row in df_resumen_compras_ordenado_filtrado[df_encabezados_compras].iterrows():
+    fila = tabla.add_row().cells
+    for j, value in enumerate(row):
+        
+        # Si es la última columna (Estado/Alerta_Stock)
+        if df_encabezados_compras[j] == "Alerta_Stock":
+            if value == "CRITICO":
+                fila[j].text = ""  # Dejamos el texto vacío inicialmente
+                run = fila[j].paragraphs[0].add_run("❌ CRITICO")
+                run.font.name = "Segoe UI Emoji"
+            elif value == "OK":
+                fila[j].text = ""
+                run = fila[j].paragraphs[0].add_run("✅ OK")
+                run.font.name = "Segoe UI Emoji"
+
+        if pd.isna(value):                 # Si el valor en Nan entra al if y lo convierte en "N/A"
+            fila[j].text = "N/A"
+        elif isinstance(value, float):
+            fila[j].text = f"{value:.1f}"  # Redondear a 1 decimal si es float
+        else:
+            fila[j].text = str(value)  # Dejar enteros y texto tal como están
+
+        # ✅ Asignar ancho también a las celdas de las filas de datos
+        fila[j].width = Cm(anchos_columnas_cm[j])
+
+        # 👉 Estilo de cada celda
+        for paragraph in fila[j].paragraphs:
+            run = paragraph.runs[0]
+            #run.bold = True                      # Negrita
+            run.font.size = Pt(10)               # Tamaño de fuente
+            #run.font.name = "Calibri"            # Tipo de letra
+            
+            # 👉 Alineación específica
+            if j == 0:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT  # Primera columna a la izquierda
+            else:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Resto centrado
+
+
+# --------------GUARDAR el Documento WORD STOCK CRITICO - COMPRAS INSUMOS----------------
+
+doc.save(ruta_word_compras_insumos)
+print(f"✅ Archivo guardado en: {ruta_word_compras_insumos}")
+
+
+### -------------------------------PDF STOCK CRITICO - COMPRAS INSUMOS---------------------------
+
+# Convierte un archivo Word específico a PDF
+convert(ruta_word_compras_insumos, ruta_pdf_compras_insumos) # crea documento.pdf en el mismo directorio
+
+
+
+
+#-------------------------------------------------------------------------------------------------
+#--------------------------------------WORD INACTIVOS---------------------------------------------
+#-------------------------------------------------------------------------------------------------
+
+### **🔹 Crear el Word**
+doc = Document()
+
+
+# -------------------CONFIGURACIÓN WORD COMPRAS INSUMOS-----------------------
+
+# 1. Márgenes del documento, (1 cm = 0.3937 pulgadas)
+sections = doc.sections
+for section in sections:
+    section.top_margin = Cm(0.5)
+    section.bottom_margin = Cm(0.5)
+    section.left_margin = Cm(1)
+    section.right_margin = Cm(1)
+
+# 2. Cambiar orientación a HORIZONTAL (LANDSCAPE)
+section = doc.sections[-1]  # Puedes usar [-1] para tomar la última sección (o [0] si es una sola)
+section.orientation = WD_ORIENT.LANDSCAPE
+
+# ⚠️ Este paso es obligatorio para que el cambio surta efecto
+new_width, new_height = section.page_height, section.page_width
+section.page_width = new_width
+section.page_height = new_height
+
+# 3. Alineación del título principal
+titulo = doc.add_heading("Informe INACTIVOS", level=1)
+titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Centrar título
+
+# (Opcional) Cambiar fuente y tamaño del título
+run = titulo.runs[0]
+#run.font.name = "Calibri"
+run.font.size = Pt(16)
+
+
+# -------------------CONFIGURACIÓN DATOS COLUMNAS - INACTIVOS-----------------------
+
+# Lista de encabezados de la hoja RESUMEN
+df_encabezados_compras = [
+    "Producto",
+    "SKU",
+    "UND",
+    "Stock",
+    "Dias_Stock_Actual",
+    "Stock_Maximo", 
+    "Cantidad_Comprar_o_Producir",
+    "%Disponibilidad",
+    "Alerta_Stock"]
+
+
+# Lista de encabezados para el informe en word.
+encabezados_compras_word = [
+    "PRODUCTO",
+    "SKU",
+    "UND",
+    "Stock",
+    "Dias Stock",
+    "Stock Max",
+    "Comprar",
+    "%Disp",
+    "Estado"]
+
+# Ordenar todos los datos de manera ascendente por DIAS STOCK ACTIAL
+df_resumen_compras_ordenado = df_resumen.sort_values(by="Dias_Stock_Actual", ascending=True)  # Ascendente
+
+# Filtrar los productos que tienen Stock Critico
+df_resumen_compras_ordenado_filtrado = df_resumen_compras_ordenado[
+    (df_activos["Estado"] == "Inactivo")]
+
+# Agregar tabla a Word
+tabla = doc.add_table(rows=1, cols=len(encabezados_compras_word), style="Table Grid") #Tabla tamaño, 1 fila y el n° de encabezados por columnas
+
+tabla.autofit = False  # ✅ Word NO ajustará automáticamente el ancho de cada columna
+
+# Configurar ancho de las columnas
+anchos_columnas_cm = [10, 2, 1.5, 2, 2, 2, 2, 2.12, 2.7]
+
+
+# -------------------CONFIGURACIÓN ENCABEZADOS WORD - COMPRAS INSUMOS-----------------------
+
+# ✅ Hace que el encabezado se repita en cada página
+# tabla.rows[0].repeat_header = True
+
+# Agregar encabezados para el informe en word
+celdas = tabla.rows[0].cells # Selecciona todas las celdas de la 1° fila (rows[0]) y de todas las columnas (cells).
+for i, encabezado in enumerate(encabezados_compras_word):  # Recorre toda la lista de encabezados.
+    celdas[i].text = str(encabezado) # Agrega cada encabezado de la lista a la respectiva celda.
+
+    # ✅ Asignar ancho también a las celdas de las filas de datos
+    celdas[i].width = Cm(anchos_columnas_cm[i])
+
+    # Alineación vertical (celda)
+    celdas[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER  
+
+    # 👉 Formato de fuente y alineación
+    for paragraph in celdas[i].paragraphs:
+        run = paragraph.runs[0]
+        run.bold = True                      # Negrita
+        #run.font.size = Pt(10)               # Tamaño de fuente
+        #run.font.name = "Calibri"            # Tipo de letra
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Centrado
+
+
+repetir_encabezado_en_word(tabla.rows[0])
+
+
+# -------------------DATOS DE LA MATRIZ - COMPRAS INSUMOS-----------------------
+
+# Agregar filas de datos
+for _, row in df_resumen_compras_ordenado_filtrado[df_encabezados_compras].iterrows():
+    fila = tabla.add_row().cells
+    for j, value in enumerate(row):
+        
+        # Si es la última columna (Estado/Alerta_Stock)
+        if df_encabezados_compras[j] == "Alerta_Stock":
+            if value == "CRITICO":
+                fila[j].text = ""  # Dejamos el texto vacío inicialmente
+                run = fila[j].paragraphs[0].add_run("❌ CRITICO")
+                run.font.name = "Segoe UI Emoji"
+            elif value == "OK":
+                fila[j].text = ""
+                run = fila[j].paragraphs[0].add_run("✅ OK")
+                run.font.name = "Segoe UI Emoji"
+
+        if pd.isna(value):                 # Si el valor en Nan entra al if y lo convierte en "N/A"
+            fila[j].text = "N/A"
+        elif isinstance(value, float):
+            fila[j].text = f"{value:.1f}"  # Redondear a 1 decimal si es float
+        else:
+            fila[j].text = str(value)  # Dejar enteros y texto tal como están
+
+        # ✅ Asignar ancho también a las celdas de las filas de datos
+        fila[j].width = Cm(anchos_columnas_cm[j])
+
+        # 👉 Estilo de cada celda
+        for paragraph in fila[j].paragraphs:
+            run = paragraph.runs[0]
+            #run.bold = True                      # Negrita
+            run.font.size = Pt(10)               # Tamaño de fuente
+            #run.font.name = "Calibri"            # Tipo de letra
+            
+            # 👉 Alineación específica
+            if j == 0:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT  # Primera columna a la izquierda
+            else:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Resto centrado
+
+
+# --------------GUARDAR el Documento WORD STOCK CRITICO - COMPRAS INSUMOS----------------
+
+doc.save(ruta_word_inactivos)
+print(f"✅ Archivo guardado en: {ruta_word_inactivos}")
+
+
+### -------------------------------PDF STOCK CRITICO - COMPRAS INSUMOS---------------------------
+
+# Convierte un archivo Word específico a PDF
+convert(ruta_word_inactivos, ruta_pdf_inactivos) # crea documento.pdf en el mismo directorio
 
 
 
 
 
+#----------------------------------------------------------------------------------------------
+#--------------------------------------EMAIL---------------------------------------------------
+#----------------------------------------------------------------------------------------------
 
-#----------------------------------------------------------
-### -----------------------EMAIL--------------------------
 
-
-# -----------CONFIGURACIÓN----------
+# -----------CONFIGURACIÓN SERVIDOR----------
 
 # 📌 Configurar los datos del correo
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-EMAIL_SENDER = "tomas.guevara.mesa@gmail.com"
-EMAIL_PASSWORD = "ydwd ntns xjia zscu"  # Contraseña de aplicación (secreta)
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")  # Tu correo electrónico (secreto)
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")  # Contraseña de aplicación (secreta)
 
 # 📌 Leer destinatarios
 df_destinatarios = pd.read_excel(ruta_dcrit)
@@ -1491,7 +1859,9 @@ try:
             informe_mp = row["SC - MP"].strip().upper() == "SI"
             informe_pt = row["SC - PT"].strip().upper() == "SI"
             informe_bv = row["SC - BV"].strip().upper() == "SI"
-            informe_compras = row["SC - COMPRAS"].strip().upper() == "SI"
+            informe_compras_bienes = row["COMPRAS - BIENES"].strip().upper() == "SI"
+            informe_compras_insumos = row["COMPRAS - INSUMOS"].strip().upper() == "SI"
+            informe_inactivos = row["INACTIVOS"].strip().upper() == "SI"
             excel_pt = row["EXCEL - PT"].strip().upper() == "SI"
             excel_compras = row["EXCEL - COMPRAS"].strip().upper() == "SI"
             excel_historial = row["EXCEL - HISTORIAL"].strip().upper() == "SI"
@@ -1515,14 +1885,12 @@ try:
                 {alerta_html}
                 <p>Te comparto los informes actualizados relacionados con el stock de productos:</p>
                 <ul>
-                    {"<li><b>Informe Stock Crítico - MP:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_mp else ""}
-                    {"<li><b>Informe Stock Crítico - PT:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_pt else ""}
-                    {"<li><b>Informe Stock Crítico - BV:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_bv else ""}
-                    {"<li><b>Informe Stock Crítico - COMPRAS:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_compras else ""}
-                    {"<li><b>Excel - PT:</b> excel del Informe Stock Crítico - PT.</li>" if excel_pt else ""}
-                    {"<li><b>Excel - COMPRAS:</b> excel del Informe Stock Crítico - COMPRAS.</li>" if excel_compras else ""}
-                    {"<li><b>Excel - BODEGA VENTAS:</b> excel del Informe Stock Crítico - BODEGA VENTAS.</li>" if excel_bv else ""}
-                    {"<li><b>Historial Completo:</b> muestra el seguimiento general del inventario.</li>" if excel_historial else ""}
+                    {"<li><b>Informe MP:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_mp else ""}
+                    {"<li><b>Informe PT:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_pt else ""}
+                    {"<li><b>Informe BV:</b> incluye los productos (en orden por días) que requieren atención inmediata.</li>" if informe_bv else ""}
+                    {"<li><b>Informe COMPRAS - BIENES:</b> incluye los bienes (en orden por días) que se necesitan comprar.</li>" if informe_compras_bienes else ""}
+                    {"<li><b>Informe COMPRAS - INSUMOS:</b> incluye los insumos (en orden por días) que se necesitan comprar.</li>" if informe_compras_insumos else ""}
+                    {"<li><b>Informe INACTIVOS:</b> incluye los productos que están inactivos.</li>" if informe_inactivos else ""}
                 </ul>
                 <p>Por favor, revisa los documentos adjuntos. Ante cualquier consulta, no dudes en contactarme.</p>
                 <p>Saludos cordiales,<br><b>Tomás Guevara</b></p>
@@ -1537,34 +1905,49 @@ try:
             msg.set_content("Este mensaje está en formato HTML.")
             msg.add_alternative(html_message, subtype="html")
 
-            # Adjuntar solo lo que corresponde
-            if informe_mp and os.path.exists(ruta_pdf3):
-                with open(ruta_pdf3, "rb") as f:
-                    msg.add_attachment(f.read(), 
-                                       maintype="application", 
-                                       subtype="pdf", 
+            #------------Adjuntar ARCHIVOS-----------
+
+            if informe_mp and os.path.exists(ruta_pdf_mp):
+                with open(ruta_pdf_mp, "rb") as f:
+                    msg.add_attachment(f.read(),
+                                       maintype="application",
+                                       subtype="pdf",
                                        filename="Informe MP.pdf")
 
-            if informe_pt and os.path.exists(ruta_pdf4):
-                 with open(ruta_pdf4, "rb") as f:
-                    msg.add_attachment(f.read(), 
-                                       maintype="application", 
-                                       subtype="pdf", 
+            if informe_pt and os.path.exists(ruta_pdf_pt):
+                 with open(ruta_pdf_pt, "rb") as f:
+                    msg.add_attachment(f.read(),
+                                       maintype="application",
+                                       subtype="pdf",
                                        filename="Informe PT.pdf")
                     
             if informe_bv and os.path.exists(ruta_pdf_bv):
                  with open(ruta_pdf_bv, "rb") as f:
-                    msg.add_attachment(f.read(), 
-                                       maintype="application", 
-                                       subtype="pdf", 
+                    msg.add_attachment(f.read(),
+                                       maintype="application",
+                                       subtype="pdf",
                                        filename="Informe BV.pdf")
                     
-            if informe_compras and os.path.exists(ruta_pdf_compras):
-                 with open(ruta_pdf_compras, "rb") as f:
+            if informe_compras_bienes and os.path.exists(ruta_pdf_compras_bienes):
+                 with open(ruta_pdf_compras_bienes, "rb") as f:
                     msg.add_attachment(f.read(), 
-                                       maintype="application", 
-                                       subtype="pdf", 
-                                       filename="Informe COMPRAS.pdf")
+                                       maintype="application",
+                                       subtype="pdf",
+                                       filename="Informe COMPRAS - BIENES.pdf")
+            
+            if informe_compras_insumos and os.path.exists(ruta_pdf_compras_insumos):
+                 with open(ruta_pdf_compras_insumos, "rb") as f:
+                    msg.add_attachment(f.read(), 
+                                       maintype="application",
+                                       subtype="pdf",
+                                       filename="Informe COMPRAS - INSUMOS.pdf")
+                    
+            if informe_inactivos and os.path.exists(ruta_pdf_inactivos):
+                 with open(ruta_pdf_inactivos, "rb") as f:
+                    msg.add_attachment(f.read(), 
+                                       maintype="application",
+                                       subtype="pdf",
+                                       filename="Informe INACTIVOS.pdf")
 
             # Adjuntar Excel del historial
             if excel_historial:
@@ -1600,11 +1983,11 @@ try:
                             f.read(),
                             maintype="application",
                             subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            filename="Informe COMPRAS.xlsx"
+                            filename="Informe COMPRAS - BIENES.xlsx"
                         )
                 else:
-                    print("⚠️ El archivo Excel COMPRAS no fue encontrado.")
-            
+                    print("⚠️ El archivo Excel COMPRAS - BIENES no fue encontrado.")
+
             # Adjuntar Excel de Informe BODEGA VENTAS
             if excel_bv:
                 if os.path.exists(ruta_excel_bv):
